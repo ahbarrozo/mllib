@@ -8,7 +8,7 @@ import seaborn as sns
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.decomposition import PCA
 from sklearn.externals import joblib
-from sklearn.model_selection import cross_val_score, GridSearchCV, StratifiedShuffleSplit
+from sklearn.model_selection import cross_val_score, GridSearchCV, StratifiedShuffleSplit, train_test_split
 from sklearn.impute import SimpleImputer
 from sklearn.pipeline import FeatureUnion, Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -35,8 +35,8 @@ class MLDataset:
             sys.exit('Could not open the dataset as a pandas DataFrame. Aborting.')
         else:
             self._dataset = data_frame
-            self._strattrain = None
-            self._strattest = None
+            self._train = data_frame
+            self._test = None
             self._labelstrain = None
             self._labelstest = None
             self._numattribs = None
@@ -117,7 +117,7 @@ class MLDataset:
 
         for cat_attrib in self._catattribs:
             cat_encoder = OneHotEncoder(categories='auto')
-            cat_encoder.fit_transform(self._strattest[cat_attrib].values.reshape(-1, 1))
+            cat_encoder.fit_transform(self._test[cat_attrib].values.reshape(-1, 1))
             cat_one_hot_attribs = cat_encoder.categories_[0].tolist()
             attributes += cat_one_hot_attribs
         return sorted(zip(feature_importances, attributes), reverse=True)
@@ -135,11 +135,12 @@ class MLDataset:
         if label_name not in self._dataset.columns:
             print(f'ERROR: {label_name} is not a valid attribute')
         else:
-            if self._strattrain is not None and self._strattest is not None:
-                self._labelstrain = self._strattrain[label_name].copy()
-                self._labelstest = self._strattest[label_name].copy()
-                self._strattrain.drop(label_name, axis=1, inplace=True)
-                self._strattest.drop(label_name, axis=1, inplace=True)
+            if self._train is not None:
+                self._labelstrain = self._train[label_name].copy()
+                self._train.drop(label_name, axis=1, inplace=True)
+                if self._test is not None:
+                    self._labelstest = self._test[label_name].copy()
+                    self._test.drop(label_name, axis=1, inplace=True)
 
     def plot_corr_mat(self):
         plt.figure(figsize=(11, 7))
@@ -210,12 +211,12 @@ class MLDataset:
             elif type(cat_attribs) is list:
                 self._catattribs = cat_attribs
             self._numattribs = list(
-                [attrib for attrib in self._strattrain.columns.tolist() if attrib not in self._catattribs])
+                [attrib for attrib in self._train.columns.tolist() if attrib not in self._catattribs])
             self._attribs = self._numattribs.copy()
             for attrib in self._catattribs:
                 self._attribs.extend(list(self._dataset[attrib].unique()))
         else:
-            self._numattribs = self._strattrain.columns.tolist()
+            self._numattribs = self._train.columns.tolist()
             self._attribs = self._numattribs.copy()
 
     def set_pipeline(self, filler="median"):
@@ -268,11 +269,11 @@ class MLDataset:
         split = StratifiedShuffleSplit(n_splits=1, test_size=test_size, random_state=seed)
 
         for train_index, test_index in split.split(self._dataset, self._dataset[strat_name]):
-            self._strattrain = self._dataset.loc[train_index]
-            self._strattest = self._dataset.loc[test_index]
+            self._train = self._dataset.loc[train_index]
+            self._test = self._dataset.loc[test_index]
 
         if drop is True:
-            for set_ in (self._dataset, self._strattest, self._strattrain):
+            for set_ in (self._dataset, self._test, self._train):
                 set_.drop(strat_name, axis=1, inplace=True)
 
 
